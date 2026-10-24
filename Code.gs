@@ -1,5 +1,5 @@
 /** E-Tiket Laptop FM — backend Google Apps Script */
-function doGet(){return HtmlService.createHtmlOutputFromFile('Index').setTitle('E-Tiket Laptop FM').addMetaTag('viewport','width=device-width, initial-scale=1').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
+function doGet(){return HtmlService.createHtmlOutputFromFile('Index').setTitle('E-Tiket Laptop FM').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
 function apiLogin(p){return api_(login_,p)}
 function apiGetAppData(p){return api_(getAppData_,p)}
 function apiSaveSantri(p){return api_(x=>saveSimple_('Santri',x,['NIS','Nama']),p)}
