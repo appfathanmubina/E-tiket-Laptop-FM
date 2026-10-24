@@ -1,26 +1,87 @@
 <!doctype html>
 <html lang="id">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#6d28d9">
-  <meta name="robots" content="noindex">
-  <title>Membuka E-Tiket Laptop FM</title>
-  <meta http-equiv="refresh" content="2;url=https://script.google.com/macros/s/AKfycbyUX76nR2v0zRwd-7WR-cLRw3DDtfnT6ZsW0xeSOau3NaRK7hn6sYAyjOHrvqY_AEn-KA/exec">
-  <style>
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#35105f,#6d28d9,#a78bfa);font:15px system-ui,-apple-system,"Segoe UI",sans-serif;color:#24133f}.card{width:min(440px,100%);background:#fff;border-radius:24px;padding:30px 24px;text-align:center;box-shadow:0 24px 70px #1b102c55}.logo{width:64px;height:64px;margin:0 auto 18px;border-radius:20px;display:grid;place-items:center;background:#f3e8ff;color:#6d28d9;font-size:30px}.card h1{font-size:22px;margin:0 0 10px}.card p{color:#766487;line-height:1.7;margin:0 0 22px}.btn{display:inline-block;padding:13px 18px;border-radius:12px;background:#6d28d9;color:#fff;text-decoration:none;font-weight:750}.note{font-size:12px;margin-top:16px!important;margin-bottom:0!important}
-  </style>
-  <script>
-    window.setTimeout(function(){ window.location.replace("https://script.google.com/macros/s/AKfycbyUX76nR2v0zRwd-7WR-cLRw3DDtfnT6ZsW0xeSOau3NaRK7hn6sYAyjOHrvqY_AEn-KA/exec"); }, 1200);
-  </script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#4c1d95">
+<meta name="description" content="E-Tiket Laptop FM — pengelolaan penitipan dan pemakaian laptop santri.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="E-Tiket Laptop FM">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon-192.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/icon-192.svg">
+<title>E-Tiket Laptop FM</title>
+<style>
+:root{color-scheme:light;--purple:#4c1d95;--purple2:#6d28d9;--gold:#fbbf24}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#f8f6fc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+#app-frame{position:fixed;inset:0;width:100%;height:100%;border:0;background:#f8f6fc}
+#frame-crop{position:fixed;inset:0;overflow:hidden;background:#f8f6fc}
+#app-frame{top:-52px;height:calc(100% + 52px)}
+#install-panel{position:fixed;z-index:20;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:none;align-items:center;gap:10px;padding:12px;background:#fff;border:1px solid #e9ddfa;border-radius:16px;box-shadow:0 8px 30px #24133f26;color:#24133f}
+#install-panel.show{display:flex}
+#install-panel .copy{flex:1;min-width:0;font-size:12px;line-height:1.45}
+#install-panel strong{display:block;font-size:13px}
+#install-button{border:0;border-radius:10px;background:var(--purple2);color:white;padding:10px 12px;font-weight:750;white-space:nowrap}
+#close-install{border:0;background:transparent;color:#766487;font-size:20px;padding:4px}
+#ios-help{display:none;position:fixed;z-index:19;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));padding:14px 16px;background:#fff;border:1px solid #e9ddfa;border-radius:16px;box-shadow:0 8px 30px #24133f26;color:#24133f;font-size:13px;line-height:1.5}
+#ios-help.show{display:block}
+#ios-help button{float:right;border:0;background:#f3e8ff;color:#4c1d95;border-radius:8px;padding:6px 10px}
+@media (display-mode:standalone){#install-panel,#ios-help{display:none!important}}
+</style>
 </head>
 <body>
-  <main class="card">
-    <div class="logo" aria-hidden="true">💻</div>
-    <h1>E-Tiket Laptop FM</h1>
-    <p>Anda akan diarahkan ke aplikasi utama untuk masuk dan mengelola data laptop santri.</p>
-    <a class="btn" href="https://script.google.com/macros/s/AKfycbyUX76nR2v0zRwd-7WR-cLRw3DDtfnT6ZsW0xeSOau3NaRK7hn6sYAyjOHrvqY_AEn-KA/exec">Buka aplikasi sekarang</a>
-    <p class="note">Jika halaman tidak terbuka otomatis, tekan tombol di atas.</p>
-  </main>
+<div id="frame-crop">
+  <iframe id="app-frame" title="E-Tiket Laptop FM" src="https://script.google.com/macros/s/AKfycbyUX76nR2v0zRwd-7WR-cLRw3DDtfnT6ZsW0xeSOau3NaRK7hn6sYAyjOHrvqY_AEn-KA/exec" allow="clipboard-read; clipboard-write" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+</div>
+<div id="install-panel" role="region" aria-label="Instal aplikasi">
+  <div class="copy"><strong>Pasang E-Tiket Laptop FM</strong>Tambahkan ke layar utama agar mudah dibuka seperti aplikasi.</div>
+  <button id="install-button" type="button">Instal</button>
+  <button id="close-install" type="button" aria-label="Tutup">×</button>
+</div>
+<div id="ios-help" role="dialog" aria-label="Cara memasang aplikasi">
+  <button id="close-ios" type="button">Tutup</button>
+  <strong>Pasang di iPhone/iPad</strong><br>
+  Tekan tombol <strong>Bagikan</strong> pada browser, lalu pilih <strong>Tambahkan ke Layar Utama</strong>.
+</div>
+<script>
+(function(){
+  const installPanel=document.getElementById('install-panel');
+  const installButton=document.getElementById('install-button');
+  const closeInstall=document.getElementById('close-install');
+  const iosHelp=document.getElementById('ios-help');
+  let deferredPrompt=null;
+  const standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)&&!window.MSStream;
+  if(!standalone){
+    if(isIOS){
+      installPanel.classList.add('show');
+      installButton.textContent='Cara instal';
+      installButton.addEventListener('click',()=>iosHelp.classList.add('show'));
+    }
+  }
+  window.addEventListener('beforeinstallprompt',event=>{
+    event.preventDefault();
+    deferredPrompt=event;
+    if(!standalone){installPanel.classList.add('show');installButton.textContent='Instal';}
+  });
+  installButton.addEventListener('click',async()=>{
+    if(isIOS){iosHelp.classList.add('show');return;}
+    if(!deferredPrompt){installButton.textContent='Gunakan menu browser';return;}
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt=null;
+    installPanel.classList.remove('show');
+  });
+  closeInstall.addEventListener('click',()=>installPanel.classList.remove('show'));
+  document.getElementById('close-ios').addEventListener('click',()=>iosHelp.classList.remove('show'));
+  window.addEventListener('appinstalled',()=>{installPanel.classList.remove('show');iosHelp.classList.remove('show');});
+  if('serviceWorker' in navigator && location.protocol==='https:'){
+    window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(err=>console.warn('Service worker tidak terdaftar:',err)));
+  }
+})();
+</script>
 </body>
 </html>
