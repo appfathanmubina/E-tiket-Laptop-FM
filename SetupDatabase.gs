@@ -3,7 +3,7 @@ const APP_CONFIG = {
   SPREADSHEET_ID: '',
   SHEETS: {
     Pengaturan:['Kunci','Nilai','Keterangan'],
-    Santri:['ID_Santri','NIS','Nama','Kelas','Asrama','Status','No_HP_Wali','Catatan','Dibuat_Pada','Diubah_Pada'],
+    Santri:['ID_Santri','NIS','Nama','Kelas','Asrama','Status','No_HP_Wali','Foto_File_ID','Catatan','Dibuat_Pada','Diubah_Pada'],
     Laptop:['ID_Laptop','Kode_Aset','Merek_Model','Nomor_Seri','Kelengkapan','Kondisi','Status','Catatan','Dibuat_Pada','Diubah_Pada'],
     Penitipan:['ID_Transaksi','Tanggal_Masuk','ID_Santri','Nama_Santri','ID_Laptop','Kode_Aset','Kelengkapan','Kondisi_Masuk','Petugas','Status','Tanggal_Keluar','Catatan','Dibuat_Pada'],
     Pemakaian:['ID_Pemakaian','Tanggal_Pinjam','Batas_Kembali','Tanggal_Kembali','ID_Santri','Nama_Santri','ID_Laptop','Kode_Aset','Tujuan','Pemberi_Izin','Petugas_Keluar','Petugas_Kembali','Kondisi_Keluar','Kondisi_Kembali','Status','Catatan','Dibuat_Pada'],
