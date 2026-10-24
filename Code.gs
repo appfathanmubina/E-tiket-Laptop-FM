@@ -5,7 +5,7 @@ function apiGetAppData(p){return api_(getAppData_,p)}
 function apiSaveSantri(p){return api_(x=>saveSimple_('Santri',x,['NIS','Nama']),p)}
 function apiGetFotoSantri(p){return api_(getFotoSantri_,p)}
 function apiGetFotoBukti(p){return api_(getFotoBukti_,p)}
-function apiSaveLaptop(p){return api_(x=>saveSimple_('Laptop',x,['Kode_Aset']),p)}
+function apiSaveLaptop(p){return api_(saveLaptopAndDeposit_,p)}
 function apiSavePenitipan(p){return api_(saveDeposit_,p)}
 function apiCheckoutLaptop(p){return api_(checkout_,p)}
 function apiReturnLaptop(p){return api_(returnLaptop_,p)}
@@ -80,6 +80,20 @@ function getFotoBukti_(p){
  if(!/^image\/(jpeg|png|webp)$/.test(mime))throw Error('File foto tidak valid.');
  return {dataUrl:'data:'+mime+';base64,'+Utilities.base64Encode(blob.getBytes())};
 }
+function saveLaptopAndDeposit_(p){
+ const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>String(x.ID_Santri)===String(p.ID_Santri)&&x.Status!=='Nonaktif');
+ if(!s)throw Error('Pilih pemilik dari data santri aktif.');
+ if(!String(p.Kode_Aset||'').trim())throw Error('Kode aset wajib diisi.');
+ const laptops=objects_(ss.getSheetByName('Laptop'));
+ if(laptops.some(x=>String(x.Kode_Aset).trim().toLowerCase()===String(p.Kode_Aset).trim().toLowerCase()))throw Error('Kode aset sudah digunakan.');
+ const now=new Date(),laptopId='LPT-'+Utilities.getUuid().slice(0,8).toUpperCase(),depositId='TTP-'+Utilities.getUuid().slice(0,8).toUpperCase();
+ const laptop={ID_Laptop:laptopId,Kode_Aset:String(p.Kode_Aset).trim(),Merek_Model:p.Merek_Model||'',Nomor_Seri:p.Nomor_Seri||'',Kelengkapan:p.Kelengkapan||'',Kondisi:p.Kondisi||'Baik',Status:'Dititipkan',Catatan:p.Catatan||'',Dibuat_Pada:now,Diubah_Pada:now};
+ append_('Laptop',laptop);
+ append_('Penitipan',{ID_Transaksi:depositId,Tanggal_Masuk:now,ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,ID_Laptop:laptopId,Kode_Aset:laptop.Kode_Aset,Kelengkapan:laptop.Kelengkapan,Kondisi_Masuk:laptop.Kondisi,Petugas:u.name,Status:'Dititipkan',Catatan:p.Catatan||'',Dibuat_Pada:now});
+ log_(u.username,'TAMBAH','Laptop',laptopId,laptop.Kode_Aset+' / pemilik: '+s.Nama);
+ log_(u.username,'PENITIPAN','Penitipan',depositId,s.Nama+' / '+laptop.Kode_Aset);
+ return {message:'Laptop berhasil ditambahkan dan otomatis dititipkan atas nama '+s.Nama+'.'};
+}
 function saveDeposit_(p){
  const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri),l=objects_(ss.getSheetByName('Laptop')).find(x=>x.ID_Laptop===p.ID_Laptop);
  if(!s||!l)throw Error('Pilih santri dan laptop yang valid.');
@@ -89,11 +103,14 @@ function saveDeposit_(p){
  update_('Laptop','ID_Laptop',l.ID_Laptop,{Status:'Dititipkan',Diubah_Pada:now});log_(u.username,'PENITIPAN','Penitipan',id,s.Nama+' / '+l.Kode_Aset);return {message:'Penitipan berhasil dicatat.'};
 }
 function checkout_(p){
- const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri),l=objects_(ss.getSheetByName('Laptop')).find(x=>x.ID_Laptop===p.ID_Laptop);
- if(!s||!l||!p.Batas_Kembali)throw Error('Santri, laptop, dan batas kembali wajib diisi.');
- const deposit=objects_(ss.getSheetByName('Penitipan')).find(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dititipkan');
- if(!deposit)throw Error('Laptop ini belum tercatat sedang dititipkan. Catat penitipan terlebih dahulu.');
- if(String(deposit.ID_Santri)!==String(s.ID_Santri))throw Error('Laptop ini dititipkan oleh santri lain. Hanya santri pemilik penitipan yang boleh memakainya.');
+ const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>String(x.ID_Santri)===String(p.ID_Santri)&&x.Status!=='Nonaktif');
+ if(!s||!p.Batas_Kembali)throw Error('Santri aktif dan batas kembali wajib diisi.');
+ const activeDeposits=objects_(ss.getSheetByName('Penitipan')).filter(x=>String(x.ID_Santri)===String(s.ID_Santri)&&x.Status==='Dititipkan');
+ if(activeDeposits.length===0)throw Error('Santri ini tidak memiliki laptop yang sedang dititipkan. Pemakaian ditolak.');
+ if(activeDeposits.length>1)throw Error('Santri ini memiliki lebih dari satu laptop dengan status penitipan aktif. Rapikan data penitipan terlebih dahulu.');
+ const deposit=activeDeposits[0],l=objects_(ss.getSheetByName('Laptop')).find(x=>String(x.ID_Laptop)===String(deposit.ID_Laptop));
+ if(!l)throw Error('Data laptop pada penitipan tidak ditemukan. Periksa data penitipan.');
+ if(objects_(ss.getSheetByName('Penitipan')).some(x=>String(x.ID_Laptop)===String(l.ID_Laptop)&&x.Status==='Dititipkan'&&String(x.ID_Santri)!==String(s.ID_Santri)))throw Error('Laptop ini memiliki konflik data pemilik penitipan. Pemakaian ditolak.');
  if(objects_(ss.getSheetByName('Pemakaian')).some(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dipinjam'))throw Error('Laptop sedang dipinjam.');
  if(new Date(p.Batas_Kembali)<=new Date())throw Error('Batas kembali harus di masa mendatang.');
  const id='PMK-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date(),fotoId=savePrivatePhoto_(p.Foto_DataUrl,'Foto-Pemakaian',id);
