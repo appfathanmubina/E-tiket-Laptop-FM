@@ -93,3 +93,56 @@ function resetPasswordAdminAwal() {
   log_('admin', 'RESET_PASSWORD', 'Pengguna', '', 'Password admin diperbarui oleh fungsi reset.');
   return 'Password akun admin berhasil diperbarui ke 123456.';
 }
+
+/**
+ * Buat/perbarui dua akun petugas khusus.
+ * Jalankan manual satu kali dari editor Apps Script.
+ * Tidak mengubah akun admin utama.
+ */
+function setupAkunPetugas() {
+  const sh = getDatabase_().getSheetByName('Pengguna');
+  if (!sh) throw new Error('Sheet Pengguna tidak ditemukan. Jalankan setupDatabase() terlebih dahulu.');
+
+  const values = sh.getDataRange().getValues();
+  if (!values.length) throw new Error('Header sheet Pengguna tidak ditemukan.');
+  const headers = values[0].map(h => String(h).trim());
+  const col = {};
+  ['ID_Pengguna','Nama','Username','Password_Hash','Peran','Status','Dibuat_Pada','Login_Terakhir'].forEach(k => {
+    col[k] = headers.indexOf(k);
+    if (col[k] < 0) throw new Error('Kolom ' + k + ' tidak ditemukan pada sheet Pengguna.');
+  });
+
+  const accounts = [
+    { username: 'adminpakai', name: 'Admin Pemakaian', role: 'Admin Pemakaian' },
+    { username: 'admindisiplin', name: 'Admin Pelanggaran', role: 'Admin Pelanggaran' }
+  ];
+  const now = new Date();
+  accounts.forEach(account => {
+    const rowIndex = values.findIndex((row, i) =>
+      i > 0 && String(row[col.Username]).trim().toLowerCase() === account.username
+    );
+    if (rowIndex > 0) {
+      const rowNumber = rowIndex + 1;
+      sh.getRange(rowNumber, col.Nama + 1).setValue(account.name);
+      sh.getRange(rowNumber, col.Password_Hash + 1).setValue(hashPassword_('123456'));
+      sh.getRange(rowNumber, col.Peran + 1).setValue(account.role);
+      sh.getRange(rowNumber, col.Status + 1).setValue('Aktif');
+    } else {
+      const row = [];
+      headers.forEach(() => row.push(''));
+      row[col.ID_Pengguna] = 'USR-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+      row[col.Nama] = account.name;
+      row[col.Username] = account.username;
+      row[col.Password_Hash] = hashPassword_('123456');
+      row[col.Peran] = account.role;
+      row[col.Status] = 'Aktif';
+      row[col.Dibuat_Pada] = now;
+      sh.appendRow(row);
+      values.push(row);
+    }
+  });
+
+  log_('admin', 'SETUP_AKUN_PETUGAS', 'Pengguna', '', 'Akun adminpakai dan admindisiplin dibuat/diperbarui.');
+  return 'Akun adminpakai dan admindisiplin berhasil dibuat/diperbarui dengan password awal 123456.';
+}
+
