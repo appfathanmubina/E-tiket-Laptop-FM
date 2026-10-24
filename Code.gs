@@ -3,6 +3,7 @@ function doGet(){return HtmlService.createHtmlOutputFromFile('Index').setTitle('
 function apiLogin(p){return api_(login_,p)}
 function apiGetAppData(p){return api_(getAppData_,p)}
 function apiSaveSantri(p){return api_(x=>saveSimple_('Santri',x,['NIS','Nama']),p)}
+function apiGetFotoSantri(p){return api_(getFotoSantri_,p)}
 function apiSaveLaptop(p){return api_(x=>saveSimple_('Laptop',x,['Kode_Aset']),p)}
 function apiSavePenitipan(p){return api_(saveDeposit_,p)}
 function apiCheckoutLaptop(p){return api_(checkout_,p)}
@@ -26,9 +27,31 @@ function getAppData_(p){
 function saveSimple_(name,p,required){
  const u=session_(p);required.forEach(k=>{if(!String(p[k]||'').trim())throw Error('Kolom wajib belum diisi: '+k)});
  const sh=getDatabase_().getSheetByName(name),headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0],all=objects_(sh),key=headers[0],id=p[key]||({Santri:'SNT',Laptop:'LPT'}[name]+'-'+Utilities.getUuid().slice(0,8).toUpperCase());
- if(name==='Santri'&&all.some(x=>x.NIS===String(p.NIS).trim()))throw Error('NIS sudah terdaftar.');
- if(name==='Laptop'&&all.some(x=>x.Kode_Aset===String(p.Kode_Aset).trim()))throw Error('Kode aset sudah digunakan.');
- const o=Object.assign({},p);o[key]=id;o.Status=p.Status||(name==='Laptop'?'Tersedia':'Aktif');o.Dibuat_Pada=new Date();o.Diubah_Pada=new Date();sh.appendRow(headers.map(h=>o[h]===undefined?'':o[h]));log_(u.username,'TAMBAH',name,id,p.Nama||p.Kode_Aset||'');return {message:'Data berhasil disimpan.'};
+ if(name==='Santri'&&all.some(x=>String(x.NIS).trim()===String(p.NIS).trim()))throw Error('NIS sudah terdaftar.');
+ if(name==='Laptop'&&all.some(x=>String(x.Kode_Aset).trim()===String(p.Kode_Aset).trim()))throw Error('Kode aset sudah digunakan.');
+ const o=Object.assign({},p);delete o.Foto_DataUrl;
+ if(name==='Santri'&&p.Foto_DataUrl){
+  const match=String(p.Foto_DataUrl).match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if(!match)throw Error('Format foto tidak valid. Gunakan JPG, PNG, atau WebP.');
+  if(match[2].length>1000000)throw Error('Ukuran foto terlalu besar. Pilih foto yang lebih kecil.');
+  let folderId=PropertiesService.getScriptProperties().getProperty('ETIKET_FOTO_FOLDER_ID'),folder;
+  if(folderId){try{folder=DriveApp.getFolderById(folderId)}catch(e){folder=null}}
+  if(!folder){folder=DriveApp.createFolder('E-Tiket Laptop FM - Foto Santri');PropertiesService.getScriptProperties().setProperty('ETIKET_FOTO_FOLDER_ID',folder.getId())}
+  const mime='image/'+(match[1]==='jpeg'?'jpeg':match[1]),ext=match[1]==='jpeg'?'jpg':match[1];
+  const blob=Utilities.newBlob(Utilities.base64Decode(match[2]),mime,'Foto-Santri-'+String(p.NIS).replace(/[^a-zA-Z0-9_-]/g,'_')+'.'+ext);
+  const file=folder.createFile(blob);o.Foto_File_ID=file.getId();
+ }
+ o[key]=id;o.Status=p.Status||(name==='Laptop'?'Tersedia':'Aktif');o.Dibuat_Pada=new Date();o.Diubah_Pada=new Date();
+ sh.appendRow(headers.map(h=>o[h]===undefined?'':o[h]));log_(u.username,'TAMBAH',name,id,p.Nama||p.Kode_Aset||'');return {message:'Data berhasil disimpan.'};
+}
+function getFotoSantri_(p){
+ session_(p);
+ const id=String(p.ID_Santri||'').trim();if(!id)throw Error('ID santri tidak ditemukan.');
+ const student=objects_(getDatabase_().getSheetByName('Santri')).find(x=>String(x.ID_Santri)===id);
+ if(!student||!student.Foto_File_ID)throw Error('Foto santri belum tersedia.');
+ const file=DriveApp.getFileById(String(student.Foto_File_ID)),blob=file.getBlob(),mime=blob.getContentType()||'image/jpeg';
+ if(!/^image\/(jpeg|png|webp)$/.test(mime))throw Error('File foto tidak valid.');
+ return {dataUrl:'data:'+mime+';base64,'+Utilities.base64Encode(blob.getBytes())};
 }
 function saveDeposit_(p){
  const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri),l=objects_(ss.getSheetByName('Laptop')).find(x=>x.ID_Laptop===p.ID_Laptop);
@@ -41,6 +64,9 @@ function saveDeposit_(p){
 function checkout_(p){
  const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri),l=objects_(ss.getSheetByName('Laptop')).find(x=>x.ID_Laptop===p.ID_Laptop);
  if(!s||!l||!p.Batas_Kembali)throw Error('Santri, laptop, dan batas kembali wajib diisi.');
+ const deposit=objects_(ss.getSheetByName('Penitipan')).find(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dititipkan');
+ if(!deposit)throw Error('Laptop ini belum tercatat sedang dititipkan. Catat penitipan terlebih dahulu.');
+ if(String(deposit.ID_Santri)!==String(s.ID_Santri))throw Error('Laptop ini dititipkan oleh santri lain. Hanya santri pemilik penitipan yang boleh memakainya.');
  if(objects_(ss.getSheetByName('Pemakaian')).some(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dipinjam'))throw Error('Laptop sedang dipinjam.');
  if(new Date(p.Batas_Kembali)<=new Date())throw Error('Batas kembali harus di masa mendatang.');
  const id='PMK-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date();
@@ -50,7 +76,8 @@ function checkout_(p){
 function returnLaptop_(p){
  const u=session_(p),ss=getDatabase_(),rows=objects_(ss.getSheetByName('Pemakaian')),x=rows.find(r=>r.ID_Pemakaian===p.ID_Pemakaian&&r.Status==='Dipinjam');if(!x)throw Error('Peminjaman aktif tidak ditemukan.');
  update_('Pemakaian','ID_Pemakaian',x.ID_Pemakaian,{Tanggal_Kembali:new Date(),Petugas_Kembali:u.name,Kondisi_Kembali:p.Kondisi||'Baik',Status:'Dikembalikan'});
- update_('Laptop','ID_Laptop',x.ID_Laptop,{Status:'Tersedia',Kondisi:p.Kondisi||'Baik',Diubah_Pada:new Date()});log_(u.username,'PENGEMBALIAN','Pemakaian',x.ID_Pemakaian,x.Kode_Aset);return {message:'Pengembalian berhasil dicatat.'};
+ const activeDeposit=objects_(ss.getSheetByName('Penitipan')).some(r=>r.ID_Laptop===x.ID_Laptop&&r.Status==='Dititipkan');
+ update_('Laptop','ID_Laptop',x.ID_Laptop,{Status:activeDeposit?'Dititipkan':'Tersedia',Kondisi:p.Kondisi||'Baik',Diubah_Pada:new Date()});log_(u.username,'PENGEMBALIAN','Pemakaian',x.ID_Pemakaian,x.Kode_Aset);return {message:'Pengembalian berhasil dicatat.'};
 }
 function saveViolation_(p){
  const u=session_(p),s=objects_(getDatabase_().getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri);if(!s||!p.Kategori||!p.Uraian)throw Error('Santri, kategori, dan uraian wajib diisi.');
