@@ -81,8 +81,8 @@ function getFotoBukti_(p){
  return {dataUrl:'data:'+mime+';base64,'+Utilities.base64Encode(blob.getBytes())};
 }
 function saveLaptopAndDeposit_(p){
- const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>String(x.ID_Santri)===String(p.ID_Santri)&&x.Status!=='Nonaktif');
- if(!s)throw Error('Pilih pemilik dari data santri aktif.');
+ const u=session_(p),ss=getDatabase_(),allSantri=objects_(ss.getSheetByName('Santri')),activeDeposits=objects_(ss.getSheetByName('Penitipan')).filter(x=>String(x.Status||'').trim().toLowerCase()==='dititipkan'),hasActiveDeposit=activeDeposits.some(x=>String(x.ID_Santri)===String(p.ID_Santri)),s=allSantri.find(x=>String(x.ID_Santri)===String(p.ID_Santri)&&(String(x.Status||'').trim().toLowerCase()!=='nonaktif'||hasActiveDeposit));
+ if(!s)throw Error('Pilih pemilik dari data santri aktif. Santri nonaktif hanya dapat dipilih jika masih memiliki penitipan aktif.');
  if(!String(p.Kode_Aset||'').trim())throw Error('Kode aset wajib diisi.');
  const laptops=objects_(ss.getSheetByName('Laptop'));
  if(laptops.some(x=>String(x.Kode_Aset).trim().toLowerCase()===String(p.Kode_Aset).trim().toLowerCase()))throw Error('Kode aset sudah digunakan.');
