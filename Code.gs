@@ -1,0 +1,95 @@
+/** E-Tiket Laptop FM — backend Google Apps Script */
+function doGet(){return HtmlService.createHtmlOutputFromFile('Index').setTitle('E-Tiket Laptop FM').addMetaTag('viewport','width=device-width, initial-scale=1').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
+function apiLogin(p){return api_(login_,p)}
+function apiGetAppData(p){return api_(getAppData_,p)}
+function apiSaveSantri(p){return api_(x=>saveSimple_('Santri',x,['NIS','Nama']),p)}
+function apiSaveLaptop(p){return api_(x=>saveSimple_('Laptop',x,['Kode_Aset']),p)}
+function apiSavePenitipan(p){return api_(saveDeposit_,p)}
+function apiCheckoutLaptop(p){return api_(checkout_,p)}
+function apiReturnLaptop(p){return api_(returnLaptop_,p)}
+function apiSavePelanggaran(p){return api_(saveViolation_,p)}
+function apiGetReport(p){return api_(report_,p)}
+function api_(fn,p){try{return {success:true,data:fn(p||{})}}catch(e){return {success:false,message:e.message||String(e)}}}
+function login_(p){
+ const u=String(p.username||'').trim(),pwd=String(p.password||'');if(!u||!pwd)throw Error('Masukkan username dan kata sandi.');
+ const sh=getDatabase_().getSheetByName('Pengguna'),rows=objects_(sh),i=rows.findIndex(r=>String(r.Username).toLowerCase()===u.toLowerCase()&&r.Status==='Aktif'),user=rows[i];
+ if(!user||user.Password_Hash!==hashPassword_(pwd))throw Error('Username atau kata sandi tidak sesuai.');
+ const token=Utilities.getUuid()+Utilities.getUuid(),session={id:user.ID_Pengguna,username:user.Username,name:user.Nama,role:user.Peran};
+ CacheService.getScriptCache().put('eticket_'+token,JSON.stringify(session),21600);sh.getRange(i+2,8).setValue(new Date());log_(u,'LOGIN','Sistem',user.ID_Pengguna,'Login berhasil');
+ return {token:token,user:{name:user.Nama,username:user.Username,role:user.Peran}};
+}
+function session_(p){const s=p.token&&CacheService.getScriptCache().get('eticket_'+p.token);if(!s)throw Error('Sesi berakhir. Silakan masuk kembali.');return JSON.parse(s)}
+function getAppData_(p){
+ session_(p);const ss=getDatabase_(),santri=objects_(ss.getSheetByName('Santri')),laptop=objects_(ss.getSheetByName('Laptop')),penitipan=objects_(ss.getSheetByName('Penitipan')),pemakaian=objects_(ss.getSheetByName('Pemakaian')),pelanggaran=objects_(ss.getSheetByName('Pelanggaran')),now=new Date();
+ return {user:session_(p),santri:santri.reverse(),laptop:laptop.reverse(),penitipan:penitipan.reverse(),pemakaian:pemakaian.reverse(),pelanggaran:pelanggaran.reverse(),recent:objects_(ss.getSheetByName('LogAktivitas')).slice(-10).reverse(),stats:{santri:santri.filter(x=>x.Status!=='Nonaktif').length,laptop:laptop.length,tersimpan:penitipan.filter(x=>x.Status==='Dititipkan').length,dipakai:pemakaian.filter(x=>x.Status==='Dipinjam').length,terlambat:pemakaian.filter(x=>x.Status==='Dipinjam'&&x.Batas_Kembali&&new Date(x.Batas_Kembali)<now).length,pelanggaran:pelanggaran.filter(x=>x.Tanggal&&new Date(x.Tanggal).getMonth()===now.getMonth()&&new Date(x.Tanggal).getFullYear()===now.getFullYear()).length}};
+}
+function saveSimple_(name,p,required){
+ const u=session_(p);required.forEach(k=>{if(!String(p[k]||'').trim())throw Error('Kolom wajib belum diisi: '+k)});
+ const sh=getDatabase_().getSheetByName(name),headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0],all=objects_(sh),key=headers[0],id=p[key]||({Santri:'SNT',Laptop:'LPT'}[name]+'-'+Utilities.getUuid().slice(0,8).toUpperCase());
+ if(name==='Santri'&&all.some(x=>x.NIS===String(p.NIS).trim()))throw Error('NIS sudah terdaftar.');
+ if(name==='Laptop'&&all.some(x=>x.Kode_Aset===String(p.Kode_Aset).trim()))throw Error('Kode aset sudah digunakan.');
+ const o=Object.assign({},p);o[key]=id;o.Status=p.Status||(name==='Laptop'?'Tersedia':'Aktif');o.Dibuat_Pada=new Date();o.Diubah_Pada=new Date();sh.appendRow(headers.map(h=>o[h]===undefined?'':o[h]));log_(u.username,'TAMBAH',name,id,p.Nama||p.Kode_Aset||'');return {message:'Data berhasil disimpan.'};
+}
+function saveDeposit_(p){
+ const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri),l=objects_(ss.getSheetByName('Laptop')).find(x=>x.ID_Laptop===p.ID_Laptop);
+ if(!s||!l)throw Error('Pilih santri dan laptop yang valid.');
+ if(objects_(ss.getSheetByName('Penitipan')).some(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dititipkan'))throw Error('Laptop masih tercatat dititipkan.');
+ const id='TTP-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date();
+ append_('Penitipan',{ID_Transaksi:id,Tanggal_Masuk:now,ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,ID_Laptop:l.ID_Laptop,Kode_Aset:l.Kode_Aset,Kelengkapan:p.Kelengkapan||l.Kelengkapan,Kondisi_Masuk:p.Kondisi||l.Kondisi||'Baik',Petugas:u.name,Status:'Dititipkan',Catatan:p.Catatan||'',Dibuat_Pada:now});
+ update_('Laptop','ID_Laptop',l.ID_Laptop,{Status:'Dititipkan',Diubah_Pada:now});log_(u.username,'PENITIPAN','Penitipan',id,s.Nama+' / '+l.Kode_Aset);return {message:'Penitipan berhasil dicatat.'};
+}
+function checkout_(p){
+ const u=session_(p),ss=getDatabase_(),s=objects_(ss.getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri),l=objects_(ss.getSheetByName('Laptop')).find(x=>x.ID_Laptop===p.ID_Laptop);
+ if(!s||!l||!p.Batas_Kembali)throw Error('Santri, laptop, dan batas kembali wajib diisi.');
+ if(objects_(ss.getSheetByName('Pemakaian')).some(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dipinjam'))throw Error('Laptop sedang dipinjam.');
+ if(new Date(p.Batas_Kembali)<=new Date())throw Error('Batas kembali harus di masa mendatang.');
+ const id='PMK-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date();
+ append_('Pemakaian',{ID_Pemakaian:id,Tanggal_Pinjam:now,Batas_Kembali:new Date(p.Batas_Kembali),ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,ID_Laptop:l.ID_Laptop,Kode_Aset:l.Kode_Aset,Tujuan:p.Tujuan||'',Pemberi_Izin:p.Pemberi_Izin||u.name,Petugas_Keluar:u.name,Kondisi_Keluar:p.Kondisi||'Baik',Status:'Dipinjam',Catatan:p.Catatan||'',Dibuat_Pada:now});
+ update_('Laptop','ID_Laptop',l.ID_Laptop,{Status:'Dipinjam',Diubah_Pada:now});log_(u.username,'PEMINJAMAN','Pemakaian',id,s.Nama+' / '+l.Kode_Aset);return {message:'Pemakaian laptop berhasil dicatat.'};
+}
+function returnLaptop_(p){
+ const u=session_(p),ss=getDatabase_(),rows=objects_(ss.getSheetByName('Pemakaian')),x=rows.find(r=>r.ID_Pemakaian===p.ID_Pemakaian&&r.Status==='Dipinjam');if(!x)throw Error('Peminjaman aktif tidak ditemukan.');
+ update_('Pemakaian','ID_Pemakaian',x.ID_Pemakaian,{Tanggal_Kembali:new Date(),Petugas_Kembali:u.name,Kondisi_Kembali:p.Kondisi||'Baik',Status:'Dikembalikan'});
+ update_('Laptop','ID_Laptop',x.ID_Laptop,{Status:'Tersedia',Kondisi:p.Kondisi||'Baik',Diubah_Pada:new Date()});log_(u.username,'PENGEMBALIAN','Pemakaian',x.ID_Pemakaian,x.Kode_Aset);return {message:'Pengembalian berhasil dicatat.'};
+}
+function saveViolation_(p){
+ const u=session_(p),s=objects_(getDatabase_().getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri);if(!s||!p.Kategori||!p.Uraian)throw Error('Santri, kategori, dan uraian wajib diisi.');
+ const id='PLG-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date();append_('Pelanggaran',{ID_Pelanggaran:id,Tanggal:p.Tanggal?new Date(p.Tanggal):now,ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,Kategori:p.Kategori,Tingkat:p.Tingkat||'Ringan',Lokasi:p.Lokasi||'',Uraian:p.Uraian,Bukti_URL:p.Bukti_URL||'',Tindak_Lanjut:p.Tindak_Lanjut||'',Status_Penanganan:'Belum Ditindaklanjuti',Pencatat:u.name,Dibuat_Pada:now,Diubah_Pada:now});log_(u.username,'CATAT PELANGGARAN','Pelanggaran',id,s.Nama+' / '+p.Kategori);return {message:'Pelanggaran berhasil dicatat.'};
+}
+function report_(p){session_(p);const ss=getDatabase_(),start=p.start?new Date(p.start):new Date(new Date().getFullYear(),new Date().getMonth(),1),end=p.end?new Date(p.end+'T23:59:59'):new Date(),within=(v)=>v&&new Date(v)>=start&&new Date(v)<=end;const data={penitipan:objects_(ss.getSheetByName('Penitipan')).filter(x=>within(x.Tanggal_Masuk)),pemakaian:objects_(ss.getSheetByName('Pemakaian')).filter(x=>within(x.Tanggal_Pinjam)),pelanggaran:objects_(ss.getSheetByName('Pelanggaran')).filter(x=>within(x.Tanggal))};return {data:data,totals:{penitipan:data.penitipan.length,pemakaian:data.pemakaian.length,pelanggaran:data.pelanggaran.length}}}
+function objects_(sh){if(!sh||sh.getLastRow()<2)return [];const a=sh.getDataRange().getValues(),h=a.shift();return a.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>{const o={};h.forEach((k,i)=>o[k]=r[i] instanceof Date?r[i].toISOString():r[i]);return o})}
+function append_(name,o){const sh=getDatabase_().getSheetByName(name),h=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];sh.appendRow(h.map(k=>o[k]===undefined?'':o[k]))}
+function update_(name,key,id,changes){const sh=getDatabase_().getSheetByName(name),h=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0],r=objects_(sh),i=r.findIndex(x=>String(x[key])===String(id));if(i<0)throw Error('Data tidak ditemukan.');const old=sh.getRange(i+2,1,1,h.length).getValues()[0],o={};h.forEach((k,j)=>o[k]=old[j]);Object.assign(o,changes);sh.getRange(i+2,1,1,h.length).setValues([h.map(k=>o[k]===undefined?'':o[k])])}
+function log_(u,a,m,id,d){try{append_('LogAktivitas',{ID_Log:'LOG-'+Utilities.getUuid().slice(0,8),Waktu:new Date(),Username:u,Aksi:a,Modul:m,ID_Referensi:id,Detail:d||''})}catch(e){}}
+
+/**
+ * Reset password akun admin yang sudah ada ke password awal 123456.
+ * Jalankan manual hanya bila diperlukan; tidak mengubah akun lain.
+ */
+function resetPasswordAdminAwal() {
+  const sh = getDatabase_().getSheetByName('Pengguna');
+  if (!sh) throw new Error('Sheet Pengguna tidak ditemukan.');
+
+  const values = sh.getDataRange().getValues();
+  if (values.length < 2) throw new Error('Data pengguna belum tersedia.');
+
+  const headers = values[0].map(h => String(h).trim());
+  const usernameCol = headers.indexOf('Username');
+  const hashCol = headers.indexOf('Password_Hash');
+  const statusCol = headers.indexOf('Status');
+
+  if (usernameCol < 0 || hashCol < 0 || statusCol < 0) {
+    throw new Error('Kolom Username, Password_Hash, atau Status tidak ditemukan.');
+  }
+
+  const rowIndex = values.findIndex((row, i) =>
+    i > 0 &&
+    String(row[usernameCol]).trim().toLowerCase() === 'admin' &&
+    String(row[statusCol]).trim() === 'Aktif'
+  );
+  if (rowIndex < 1) throw new Error('Akun admin aktif tidak ditemukan.');
+
+  sh.getRange(rowIndex + 1, hashCol + 1).setValue(hashPassword_('123456'));
+  log_('admin', 'RESET_PASSWORD', 'Pengguna', '', 'Password admin diperbarui oleh fungsi reset.');
+  return 'Password akun admin berhasil diperbarui ke 123456.';
+}
