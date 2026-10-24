@@ -4,6 +4,7 @@ function apiLogin(p){return api_(login_,p)}
 function apiGetAppData(p){return api_(getAppData_,p)}
 function apiSaveSantri(p){return api_(x=>saveSimple_('Santri',x,['NIS','Nama']),p)}
 function apiGetFotoSantri(p){return api_(getFotoSantri_,p)}
+function apiGetFotoBukti(p){return api_(getFotoBukti_,p)}
 function apiSaveLaptop(p){return api_(x=>saveSimple_('Laptop',x,['Kode_Aset']),p)}
 function apiSavePenitipan(p){return api_(saveDeposit_,p)}
 function apiCheckoutLaptop(p){return api_(checkout_,p)}
@@ -44,12 +45,38 @@ function saveSimple_(name,p,required){
  o[key]=id;o.Status=p.Status||(name==='Laptop'?'Tersedia':'Aktif');o.Dibuat_Pada=new Date();o.Diubah_Pada=new Date();
  sh.appendRow(headers.map(h=>o[h]===undefined?'':o[h]));log_(u.username,'TAMBAH',name,id,p.Nama||p.Kode_Aset||'');return {message:'Data berhasil disimpan.'};
 }
+function savePrivatePhoto_(dataUrl, prefix, reference){
+ if(!dataUrl)return '';
+ const match=String(dataUrl).match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+ if(!match)throw Error('Format foto tidak valid. Gunakan JPG, PNG, atau WebP.');
+ if(match[2].length>1000000)throw Error('Ukuran foto terlalu besar. Pilih foto yang lebih kecil.');
+ let folderId=PropertiesService.getScriptProperties().getProperty('ETIKET_FOTO_FOLDER_ID'),folder;
+ if(folderId){try{folder=DriveApp.getFolderById(folderId)}catch(e){folder=null}}
+ if(!folder){folder=DriveApp.createFolder('E-Tiket Laptop FM - Foto Privat');PropertiesService.getScriptProperties().setProperty('ETIKET_FOTO_FOLDER_ID',folder.getId())}
+ const mime='image/'+match[1],ext=match[1]==='jpeg'?'jpg':match[1];
+ const safe=String(reference||Utilities.getUuid()).replace(/[^a-zA-Z0-9_-]/g,'_');
+ const blob=Utilities.newBlob(Utilities.base64Decode(match[2]),mime,prefix+'-'+safe+'.'+ext);
+ return folder.createFile(blob).getId();
+}
 function getFotoSantri_(p){
  session_(p);
  const id=String(p.ID_Santri||'').trim();if(!id)throw Error('ID santri tidak ditemukan.');
  const student=objects_(getDatabase_().getSheetByName('Santri')).find(x=>String(x.ID_Santri)===id);
  if(!student||!student.Foto_File_ID)throw Error('Foto santri belum tersedia.');
  const file=DriveApp.getFileById(String(student.Foto_File_ID)),blob=file.getBlob(),mime=blob.getContentType()||'image/jpeg';
+ if(!/^image\/(jpeg|png|webp)$/.test(mime))throw Error('File foto tidak valid.');
+ return {dataUrl:'data:'+mime+';base64,'+Utilities.base64Encode(blob.getBytes())};
+}
+function getFotoBukti_(p){
+ session_(p);
+ const type=String(p.type||''),id=String(p.id||'').trim();
+ if(!id||!['pemakaian','pelanggaran'].includes(type))throw Error('Data foto tidak valid.');
+ const sheetName=type==='pemakaian'?'Pemakaian':'Pelanggaran';
+ const key=type==='pemakaian'?'ID_Pemakaian':'ID_Pelanggaran';
+ const photoKey=type==='pemakaian'?'Foto_File_ID':'Foto_Bukti_File_ID';
+ const row=objects_(getDatabase_().getSheetByName(sheetName)).find(x=>String(x[key])===id);
+ if(!row||!row[photoKey])throw Error('Foto belum tersedia.');
+ const blob=DriveApp.getFileById(String(row[photoKey])).getBlob(),mime=blob.getContentType()||'image/jpeg';
  if(!/^image\/(jpeg|png|webp)$/.test(mime))throw Error('File foto tidak valid.');
  return {dataUrl:'data:'+mime+';base64,'+Utilities.base64Encode(blob.getBytes())};
 }
@@ -69,8 +96,8 @@ function checkout_(p){
  if(String(deposit.ID_Santri)!==String(s.ID_Santri))throw Error('Laptop ini dititipkan oleh santri lain. Hanya santri pemilik penitipan yang boleh memakainya.');
  if(objects_(ss.getSheetByName('Pemakaian')).some(x=>x.ID_Laptop===l.ID_Laptop&&x.Status==='Dipinjam'))throw Error('Laptop sedang dipinjam.');
  if(new Date(p.Batas_Kembali)<=new Date())throw Error('Batas kembali harus di masa mendatang.');
- const id='PMK-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date();
- append_('Pemakaian',{ID_Pemakaian:id,Tanggal_Pinjam:now,Batas_Kembali:new Date(p.Batas_Kembali),ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,ID_Laptop:l.ID_Laptop,Kode_Aset:l.Kode_Aset,Tujuan:p.Tujuan||'',Pemberi_Izin:p.Pemberi_Izin||u.name,Petugas_Keluar:u.name,Kondisi_Keluar:p.Kondisi||'Baik',Status:'Dipinjam',Catatan:p.Catatan||'',Dibuat_Pada:now});
+ const id='PMK-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date(),fotoId=savePrivatePhoto_(p.Foto_DataUrl,'Foto-Pemakaian',id);
+ append_('Pemakaian',{ID_Pemakaian:id,Tanggal_Pinjam:now,Batas_Kembali:new Date(p.Batas_Kembali),ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,ID_Laptop:l.ID_Laptop,Kode_Aset:l.Kode_Aset,Tujuan:p.Tujuan||'',Pemberi_Izin:p.Pemberi_Izin||u.name,Petugas_Keluar:u.name,Kondisi_Keluar:p.Kondisi||'Baik',Status:'Dipinjam',Foto_File_ID:fotoId,Catatan:p.Catatan||'',Dibuat_Pada:now});
  update_('Laptop','ID_Laptop',l.ID_Laptop,{Status:'Dipinjam',Diubah_Pada:now});log_(u.username,'PEMINJAMAN','Pemakaian',id,s.Nama+' / '+l.Kode_Aset);return {message:'Pemakaian laptop berhasil dicatat.'};
 }
 function returnLaptop_(p){
@@ -81,7 +108,7 @@ function returnLaptop_(p){
 }
 function saveViolation_(p){
  const u=session_(p),s=objects_(getDatabase_().getSheetByName('Santri')).find(x=>x.ID_Santri===p.ID_Santri);if(!s||!p.Kategori||!p.Uraian)throw Error('Santri, kategori, dan uraian wajib diisi.');
- const id='PLG-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date();append_('Pelanggaran',{ID_Pelanggaran:id,Tanggal:p.Tanggal?new Date(p.Tanggal):now,ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,Kategori:p.Kategori,Tingkat:p.Tingkat||'Ringan',Lokasi:p.Lokasi||'',Uraian:p.Uraian,Bukti_URL:p.Bukti_URL||'',Tindak_Lanjut:p.Tindak_Lanjut||'',Status_Penanganan:'Belum Ditindaklanjuti',Pencatat:u.name,Dibuat_Pada:now,Diubah_Pada:now});log_(u.username,'CATAT PELANGGARAN','Pelanggaran',id,s.Nama+' / '+p.Kategori);return {message:'Pelanggaran berhasil dicatat.'};
+ const id='PLG-'+Utilities.getUuid().slice(0,8).toUpperCase(),now=new Date(),fotoId=savePrivatePhoto_(p.Foto_Bukti_DataUrl,'Foto-Bukti-Pelanggaran',id);append_('Pelanggaran',{ID_Pelanggaran:id,Tanggal:p.Tanggal?new Date(p.Tanggal):now,ID_Santri:s.ID_Santri,Nama_Santri:s.Nama,Kategori:p.Kategori,Tingkat:p.Tingkat||'Ringan',Lokasi:p.Lokasi||'',Uraian:p.Uraian,Bukti_URL:p.Bukti_URL||'',Foto_Bukti_File_ID:fotoId,Tindak_Lanjut:p.Tindak_Lanjut||'',Status_Penanganan:'Belum Ditindaklanjuti',Pencatat:u.name,Dibuat_Pada:now,Diubah_Pada:now});log_(u.username,'CATAT PELANGGARAN','Pelanggaran',id,s.Nama+' / '+p.Kategori);return {message:'Pelanggaran berhasil dicatat.'};
 }
 function report_(p){session_(p);const ss=getDatabase_(),start=p.start?new Date(p.start):new Date(new Date().getFullYear(),new Date().getMonth(),1),end=p.end?new Date(p.end+'T23:59:59'):new Date(),within=(v)=>v&&new Date(v)>=start&&new Date(v)<=end;const data={penitipan:objects_(ss.getSheetByName('Penitipan')).filter(x=>within(x.Tanggal_Masuk)),pemakaian:objects_(ss.getSheetByName('Pemakaian')).filter(x=>within(x.Tanggal_Pinjam)),pelanggaran:objects_(ss.getSheetByName('Pelanggaran')).filter(x=>within(x.Tanggal))};return {data:data,totals:{penitipan:data.penitipan.length,pemakaian:data.pemakaian.length,pelanggaran:data.pelanggaran.length}}}
 function objects_(sh){if(!sh||sh.getLastRow()<2)return [];const a=sh.getDataRange().getValues(),h=a.shift();return a.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>{const o={};h.forEach((k,i)=>o[k]=r[i] instanceof Date?r[i].toISOString():r[i]);return o})}
